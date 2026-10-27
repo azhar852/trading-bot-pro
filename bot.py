@@ -821,6 +821,16 @@ def real_time_entry_scanner():
 threading.Thread(target=real_time_entry_scanner, daemon=True).start()
 
 if __name__ == '__main__':
+  # Auto-register webhook on startup
+  try:
+    webhook_url = f'{RENDER_URL}/webhook'
+    requests.get(
+        f'https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/setWebhook?url={webhook_url}'
+    )
+    print(f'Webhook automatically set to: {webhook_url}')
+  except Exception as e:
+    print(f'Webhook auto-set error: {e}')
+
   port = int(os.environ.get('PORT', 10000))
   app.run(host='0.0.0.0', port=port)
-      
+  
