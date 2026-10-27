@@ -132,9 +132,11 @@ def home():
 @app.route('/webhook', methods=['POST'])
 def telegram_webhook():
   try:
-    update = request.get_json()
+    update = request.get_json(force=True, silent=True)
     if not update:
       return 'OK', 200
+
+    print(f'📥 Received Update: {update}')
 
     update_id = update.get('update_id')
     if update_id:
@@ -164,15 +166,28 @@ def telegram_webhook():
     text = message.get('text', '').strip()
     text_lower = text.lower()
 
-    if text_lower in ['/start', 'start']:
-      send_telegram_message(
-          chat_id,
-          '✅ *MyMarketAlertBot Ultimate Pro Active!*\n\nAll Indices, Pivots,'
-          ' AI Analysis, Support Registration & Signals Ready.\n\n💡 *Commands:*\n•'
-          ' `/calc <entry>` - Target & Stoploss\n• `/trade <symbol> <entry>'
-          ' <exit> <qty>` - Save Trade P&L\n\nSelect a command using the buttons'
-          ' below:',
-          reply_markup=get_main_keyboard(),
+    if chat_id:
+      if text_lower in ['/start', 'start']:
+        send_telegram_message(
+            chat_id,
+            '✅ *MyMarketAlertBot Ultimate Pro Active!*\n\nAll Indices, Pivots,'
+            ' AI Analysis, Support Registration & Signals Ready.\n\n💡 *Commands:*\n•'
+            ' `/calc <entry>` - Target & Stoploss\n• `/trade <symbol> <entry>'
+            ' <exit> <qty>` - Save Trade P&L\n\nSelect a command using the buttons'
+            ' below:',
+            reply_markup=get_main_keyboard(),
+        )
+      else:
+        send_telegram_message(
+            chat_id,
+            '✅ Command received. Use the interactive buttons below:',
+            reply_markup=get_main_keyboard(),
+        )
+
+  except Exception as e:
+    print(f'❌ Webhook error: {e}')
+  return 'OK', 200
+  
       )
     elif text_lower.startswith('/calc'):
       try:
