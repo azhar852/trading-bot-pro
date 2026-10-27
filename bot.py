@@ -21,10 +21,9 @@ except ImportError:
 
 app = Flask(__name__)
 
-# Hardcoded token hata kar environment variable se secure kar diya gaya hai
+# Render ke environment variable se secure token uthayega
 TELEGRAM_BOT_TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN')
 RENDER_URL = 'https://trading-bot-3-rkcp.onrender.com'
-CHANNEL_USERNAME = '@AapkaChannelUsername'
 
 LAST_SIGNAL_STATE = None
 PROCESSED_UPDATE_IDS = set()
@@ -81,23 +80,6 @@ def get_all_users():
   except Exception as e:
     print(f'DB Read Error: {e}')
   return users
-
-
-def check_user_subscription(chat_id):
-  if not TELEGRAM_BOT_TOKEN:
-    return True
-  url = f'https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/getChatMember?chat_id={CHANNEL_USERNAME}&user_id={chat_id}'
-  try:
-    response = requests.get(url, timeout=5)
-    if response.status_code == 200:
-      data = response.json()
-      if data.get('ok'):
-        status = data['result'].get('status')
-        if status in ['member', 'administrator', 'creator']:
-          return True
-  except Exception as e:
-    print(f'FSub check error: {e}')
-  return False
 
 
 def get_main_keyboard():
@@ -170,24 +152,6 @@ def telegram_webhook():
 
     if chat_id:
       add_user_to_db(chat_id)
-
-      if not check_user_subscription(chat_id):
-        join_keyboard = {
-            'inline_keyboard': [[{
-                'text': '📢 Join Channel Now',
-                'url': f'https://t.me/{CHANNEL_USERNAME.lstrip("@")}',
-            }]]
-        }
-        send_telegram_message(
-            chat_id,
-            '🚀 *To use this bot, you must join our channel first!*'
-            '\n\nPlease join the channel using the button below and then press'
-            ' /start again.',
-            reply_markup=join_keyboard,
-        )
-        if 'callback_query' in update:
-          answer_callback_query(update['callback_query']['id'])
-        return 'OK', 200
 
     if 'callback_query' in update:
       cq = update['callback_query']
@@ -369,7 +333,7 @@ def telegram_webhook():
   except Exception as e:
     print(f'Webhook error: {e}')
   return 'OK', 200
-        
+
 def send_telegram_message(chat_id, text, reply_markup=None):
   if not chat_id or not TELEGRAM_BOT_TOKEN:
     return
@@ -826,4 +790,4 @@ threading.Thread(target=real_time_entry_scanner, daemon=True).start()
 if __name__ == '__main__':
   port = int(os.environ.get('PORT', 10000))
   app.run(host='0.0.0.0', port=port)
-      
+        
