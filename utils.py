@@ -12,7 +12,8 @@ except ImportError:
   import yfinance as yf
 
 TELEGRAM_BOT_TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN')
-RENDER_URL = 'https://trading-bot-3-rkcp.onrender.com'
+RENDER_URL = 'https://trading-bot-pro-2bjl.onrender.com'
+
 
 LAST_SIGNAL_STATE = None
 PROCESSED_UPDATE_IDS = set()
