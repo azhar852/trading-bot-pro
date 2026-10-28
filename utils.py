@@ -92,7 +92,7 @@ def get_main_keyboard():
           ],
           [
               {'text': '🐋 BigMoney', 'callback_data': 'bigmoney'},
-              {'text': '🛢️ Commodity', 'callback_data': 'commodity'},
+              {'text': '🛢️ Crude Oil', 'callback_data': 'crude_oil'},
           ],
           [
               {'text': '🤖 AI Analysis', 'callback_data': 'ai_analysis'},
@@ -210,12 +210,8 @@ def process_action(chat_id, data_action):
     bm = get_big_money_alert()
     msg_bm = f"🐋 *SMART MONEY FLOW*\n• {bm['action']}\n• {bm['details']}"
     send_telegram_message(chat_id, msg_bm)
-  elif data_action == 'commodity':
-    send_telegram_message(
-        chat_id,
-        '🛢️ *MCX COMMODITY SETUP*\n• Check Crude Oil, Gold & Silver near key'
-        ' support/resistance.',
-    )
+  elif data_action == 'crude_oil':
+    send_telegram_message(chat_id, get_crude_oil_data())
   elif data_action == 'support':
     send_telegram_message(
         chat_id,
@@ -274,6 +270,34 @@ def get_market_news():
   except Exception as e:
     print(f'RSS News Fetch Error: {e}')
   return '📰 *LATEST MARKET NEWS*\n\n• Headlines currently updating.'
+
+
+def get_crude_oil_data():
+  try:
+    ticker = yf.Ticker('CL=F')
+    data = ticker.history(period='2d', interval='1d')
+    if not data.empty:
+      current_price = round(data['Close'].iloc[-1], 2)
+      prev_price = (
+          round(data['Close'].iloc[-2], 2)
+          if len(data) >= 2
+          else current_price
+      )
+      change = round(((current_price - prev_price) / prev_price) * 100, 2)
+      status = (
+          '🟢 BULLISH / RISING' if change >= 0 else '🔴 BEARISH / FALLING'
+      )
+      return (
+          f'🛢️ *CRUDE OIL LIVE MARKET*\n\n'
+          f'• *Price:* `${current_price}`\n'
+          f'• *Change:* `{change}%`\n'
+          f'• *Trend:* {status}\n\n'
+          f'💡 *Market Impact:* High crude prices increase inflation and put'
+          f' pressure on indices.'
+      )
+  except Exception as e:
+    print(f'Crude error: {e}')
+  return '🛢️ *CRUDE OIL*\n\n• Live data currently updating.'
 
 
 def get_live_market_trend(symbol='^NSEI'):
@@ -565,4 +589,4 @@ def real_time_entry_scanner():
     except Exception as e:
       print(f'Scanner error: {e}')
     time.sleep(30)
-        
+    
