@@ -213,9 +213,47 @@ def process_action(chat_id, data_action):
   elif data_action == 'commodity':
     send_telegram_message(
         chat_id,
-        '🛢️ *MCX COMMODITY SETUP*\n• Check Crude Oil
+        '🛢️ *MCX COMMODITY SETUP*\n• Check Crude Oil, Gold & Silver near key'
+        ' support/resistance.',
+    )
+  elif data_action == 'support':
+    send_telegram_message(
+        chat_id,
+        '📋 *SUPPORT & ENTERPRISE REGISTRATION*\n\n• For formal business'
+        ' registrations (MSME), documentation, or technical support'
+        ' assistance in Bhopal, contact the administrator directly through'
+        ' registered channels.\n\n_Status: Verified & Active_ ✅',
+    )
+  elif data_action == 'ai_analysis':
+    send_telegram_message(
+        chat_id, get_ai_trading_analysis('General Market Overview')
+    )
+  elif data_action == 'summary':
+    send_telegram_message(chat_id, get_daily_summary())
+  elif data_action == 'signal':
+    tr = get_live_market_trend('^NSEI')
+    msg_sig = (
+        '⚡ *REAL-TIME SCALP SIGNAL*\n'
+        f"• Index Price: `{tr['price']}`\n"
+        f"• Mode: {tr['status']}\n"
+        f"💡 {tr['action']}"
+    )
+    send_telegram_message(chat_id, msg_sig)
+  elif data_action == 'calc_help':
+    send_telegram_message(
+        chat_id,
+        '🧮 *Trade Calculator Usage*\n\nType command format in chat:\n`/calc'
+        ' 22600`\n\nIt will calculate Stop Loss and Targets automatically!',
+    )
+  elif data_action == 'trade_help':
+    send_telegram_message(
+        chat_id,
+        '📖 *Trade Journal Usage*\n\nType command format in chat:\n`/trade Nifty'
+        ' 22600 22750 50`\n\nIt will save your entry, exit and P&L in database!',
+    )
 
-      def get_market_news():
+
+def get_market_news():
   try:
     rss_url = 'https://news.google.com/rss/search?q=Indian+Stock+Market+Nifty+Sensex&hl=en-IN&gl=IN&ceid=IN:en'
     feed = feedparser.parse(rss_url)
@@ -482,7 +520,7 @@ def background_automation_scheduler():
                 f"• *Time:* {now.strftime('%H:%M:%S')}\n"
                 '• *Index:* Nifty 50\n'
                 f"• *Setup:* {rev.get('action')}\n"
-                f"• *Trigger Price:* `{rev.get('price']}`\n"
+                f"• *Trigger Price:* `{rev.get('price')}`\n"
                 f"• *Status:* {rev.get('status')}\n\n"
                 '⚡ *Action:* Risk-reward calculate karke trade execute karein!'
             )
@@ -527,4 +565,4 @@ def real_time_entry_scanner():
     except Exception as e:
       print(f'Scanner error: {e}')
     time.sleep(30)
-    
+        
