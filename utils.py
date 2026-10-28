@@ -14,7 +14,6 @@ except ImportError:
 TELEGRAM_BOT_TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN')
 RENDER_URL = 'https://trading-bot-pro-2bjl.onrender.com'
 
-
 LAST_SIGNAL_STATE = None
 PROCESSED_UPDATE_IDS = set()
 
@@ -285,40 +284,52 @@ def get_live_market_trend(symbol='^NSEI'):
 
     if len(data_5m) >= 6:
       current_price = round(data_5m['Close'].iloc[-1], 2)
-      open_price = round(data_5m['Open'].iloc[0], 2)
-      change_pct = round(
-          ((current_price - open_price) / open_price) * 100, 2
+      sma_short = data_5m['Close'].tail(5).mean()
+
+      # Immediate momentum check (Last 3 candles falling or rising)
+      last_3_falling = (
+          data_5m['Close'].iloc[-1]
+          < data_5m['Close'].iloc[-2]
+          < data_5m['Close'].iloc[-3]
+      )
+      last_3_rising = (
+          data_5m['Close'].iloc[-1]
+          > data_5m['Close'].iloc[-2]
+          > data_5m['Close'].iloc[-3]
       )
 
-      recent_high = data_5m['High'].tail(6).max()
-      recent_low = data_5m['Low'].tail(6).min()
-      range_spread_pct = ((recent_high - recent_low) / current_price) * 100
+      change_pct = round(
+          ((current_price - data_5m['Close'].iloc[0])
+           / data_5m['Close'].iloc[0])
+          * 100,
+          2,
+      )
+
+      # Smart live bias based on immediate price action & short SMA
+      if last_3_falling or current_price < sma_short:
+        status = '🔴 STRONGLY BEARISH (Sell on Rise)'
+        action = (
+            'Market is dropping from peak. Look for Put (PE) buying or short'
+            ' setups.'
+        )
+        bias = 'BEARISH'
+      elif last_3_rising or current_price > sma_short:
+        status = '🟢 STRONGLY BULLISH (Buy on Dips)'
+        action = (
+            'Market has upward momentum. Look for Call (CE) buying on support'
+            ' dips.'
+        )
+        bias = 'BULLISH'
+      else:
+        status = '⚖️ SIDEWAYS / RANGEBOUND'
+        action = 'Market is consolidating. Avoid aggressive trades.'
+        bias = 'SIDEWAYS'
 
       tf_status = 'Neutral'
       if len(data_15m) >= 2:
         p_15m = data_15m['Close'].iloc[-1]
-        o_15m = data_15m['Open'].iloc[0]
+        o_15m = data_15m['Open'].iloc[-1]
         tf_status = 'BULLISH' if p_15m > o_15m else 'BEARISH'
-
-      if range_spread_pct < 0.25 and abs(change_pct) < 0.4:
-        status = '⚖️ SIDEWAYS / RANGEBOUND (No Clear Trend)'
-        action = (
-            'Market is consolidating inside a tight range. Avoid aggressive'
-            ' breakout trades.'
-        )
-        bias = 'SIDEWAYS'
-      elif current_price < open_price or change_pct < -0.15:
-        status = '🔴 STRONGLY BEARISH (Sell on Rise)'
-        action = 'Look for Put (PE) buying on minor bounces.'
-        bias = 'BEARISH'
-      elif current_price > open_price or change_pct > 0.15:
-        status = '🟢 STRONGLY BULLISH (Buy on Dips)'
-        action = 'Look for Call (CE) buying on support dips.'
-        bias = 'BULLISH'
-      else:
-        status = '⚖️ NEUTRAL / CONSOLIDATION'
-        action = 'Wait for range breakout.'
-        bias = 'SIDEWAYS'
 
       return {
           'price': current_price,
@@ -511,7 +522,7 @@ def background_automation_scheduler():
                 f"• *Time:* {now.strftime('%H:%M:%S')}\n"
                 '• *Index:* Nifty 50\n'
                 f"• *Setup:* {rev.get('action')}\n"
-                f"• *Trigger Price:* `{rev.get('price')}`\n"
+                f"• *Trigger Price:* `{rev.get('price']}`\n"
                 f"• *Status:* {rev.get('status')}\n\n"
                 '⚡ *Action:* Risk-reward calculate karke trade execute karein!'
             )
@@ -556,4 +567,3 @@ def real_time_entry_scanner():
     except Exception as e:
       print(f'Scanner error: {e}')
     time.sleep(30)
-    
