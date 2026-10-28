@@ -250,10 +250,8 @@ def process_action(chat_id, data_action):
         chat_id,
         '📖 *Trade Journal Usage*\n\nType command format in chat:\n`/trade Nifty'
         ' 22600 22750 50`\n\nIt will save your entry, exit and P&L in database!',
-    )
-
-
-def get_market_news():
+            )
+    def get_market_news():
   try:
     rss_url = 'https://news.google.com/rss/search?q=Indian+Stock+Market+Nifty+Sensex&hl=en-IN&gl=IN&ceid=IN:en'
     feed = feedparser.parse(rss_url)
@@ -565,4 +563,4 @@ def real_time_entry_scanner():
     except Exception as e:
       print(f'Scanner error: {e}')
     time.sleep(30)
-      
+  
