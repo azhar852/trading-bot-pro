@@ -286,7 +286,6 @@ def get_live_market_trend(symbol='^NSEI'):
       current_price = round(data_5m['Close'].iloc[-1], 2)
       sma_short = data_5m['Close'].tail(5).mean()
 
-      # Immediate momentum check (Last 3 candles falling or rising)
       last_3_falling = (
           data_5m['Close'].iloc[-1]
           < data_5m['Close'].iloc[-2]
@@ -305,7 +304,6 @@ def get_live_market_trend(symbol='^NSEI'):
           2,
       )
 
-      # Smart live bias based on immediate price action & short SMA
       if last_3_falling or current_price < sma_short:
         status = '🔴 STRONGLY BEARISH (Sell on Rise)'
         action = (
@@ -567,3 +565,4 @@ def real_time_entry_scanner():
     except Exception as e:
       print(f'Scanner error: {e}')
     time.sleep(30)
+      
