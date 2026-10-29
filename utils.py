@@ -15,6 +15,7 @@ TELEGRAM_BOT_TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN')
 RENDER_URL = 'https://trading-bot-pro-2bjl.onrender.com'
 
 LAST_SIGNAL_STATE = None
+LAST_NOTIFIED_PRICE = None
 PROCESSED_UPDATE_IDS = set()
 
 
@@ -76,11 +77,11 @@ def get_main_keyboard():
       'inline_keyboard': [
           [
               {'text': '📰 News', 'callback_data': 'news'},
-              {'text': '🔄 Reversal', 'callback_data': 'reversal'},
+              {'text': '⚡ Scalping & Trading', 'callback_data': 'scalping_alert'},
           ],
           [
-              {'text': '🎯 Trend', 'callback_data': 'trend'},
-              {'text': '📊 Nifty', 'callback_data': 'nifty'},
+              {'text': '🎯 Trend Setup', 'callback_data': 'trend'},
+              {'text': '📊 Nifty 50', 'callback_data': 'nifty'},
           ],
           [
               {'text': '🏦 BankNifty', 'callback_data': 'banknifty'},
@@ -144,28 +145,20 @@ def answer_callback_query(callback_query_id):
 def process_action(chat_id, data_action):
   if data_action == 'news':
     send_telegram_message(chat_id, get_market_news())
-  elif data_action == 'reversal':
-    rev = check_reversal_pattern('^NSEI')
+  elif data_action == 'scalping_alert':
     tr = get_live_market_trend('^NSEI')
-    if rev:
-      msg_rev = (
-          '🔄 *LIVE REVERSAL*\n'
-          f"• {rev['status']}\n"
-          f"• Price: `{rev['price']}`\n"
-          f"💡 {rev['action']}"
-      )
-      send_telegram_message(chat_id, msg_rev)
-    else:
-      msg_norev = (
-          '🔄 *REVERSAL CHECK*\n'
-          f"• Trend: {tr['status']}\n"
-          '⚖️ No immediate reversal.'
-      )
-      send_telegram_message(chat_id, msg_norev)
+    msg_sc = (
+        '⚡ *SCALPING & TRADING DESK*\n\n'
+        f"• Current Price: `{tr['price']}`\n"
+        f"• Market Bias: {tr['status']}\n"
+        f"• 15-Min Setup: `{tr['tf_15m']}`\n\n"
+        f"💡 {tr['action']}"
+    )
+    send_telegram_message(chat_id, msg_sc)
   elif data_action == 'trend':
     tr = get_live_market_trend('^NSEI')
     msg_trend = (
-        '🎯 *LIVE MARKET TREND*\n\n'
+        '🎯 *INTRADAY TREND SETUP*\n\n'
         f"• *Price:* `{tr['price']}` ({tr['change']}%)\n"
         f"• *Bias:* {tr['status']}\n"
         f"• *15-Min TF:* `{tr['tf_15m']}`\n"
@@ -229,7 +222,7 @@ def process_action(chat_id, data_action):
   elif data_action == 'signal':
     tr = get_live_market_trend('^NSEI')
     msg_sig = (
-        '⚡ *REAL-TIME SCALP SIGNAL*\n'
+        '⚡ *SCALPING & TRADING SIGNAL*\n'
         f"• Index Price: `{tr['price']}`\n"
         f"• Mode: {tr['status']}\n"
         f"💡 {tr['action']}"
@@ -331,20 +324,22 @@ def get_live_market_trend(symbol='^NSEI'):
       if last_3_falling or current_price < sma_short:
         status = '🔴 STRONGLY BEARISH (Sell on Rise)'
         action = (
-            'Market is dropping from peak. Look for Put (PE) buying or short'
-            ' setups.'
+            'Intraday & Scalp: Market is dropping. Look for Put (PE) buying or'
+            ' short setups.'
         )
         bias = 'BEARISH'
       elif last_3_rising or current_price > sma_short:
         status = '🟢 STRONGLY BULLISH (Buy on Dips)'
         action = (
-            'Market has upward momentum. Look for Call (CE) buying on support'
-            ' dips.'
+            'Intraday & Scalp: Market has upward momentum. Look for Call (CE)'
+            ' buying on support dips.'
         )
         bias = 'BULLISH'
       else:
         status = '⚖️ SIDEWAYS / RANGEBOUND'
-        action = 'Market is consolidating. Avoid aggressive trades.'
+        action = (
+            'Market is consolidating. Avoid aggressive scalping/trading.'
+        )
         bias = 'SIDEWAYS'
 
       tf_status = 'Neutral'
@@ -417,14 +412,14 @@ def check_reversal_pattern(symbol='^NSEI'):
             'type': 'BULLISH_REVERSAL',
             'status': '🟢 BULLISH REVERSAL DETECTED',
             'price': round(c1, 2),
-            'action': 'Possible CE Buying Zone / Cover PE Shorts.',
+            'action': 'Scalping & Trading: CE Buying Zone / Cover PE Shorts.',
         }
       elif c4 < c3 < c2 and c1 < (sma_5 * 0.9995) and c1 < c2:
         return {
             'type': 'BEARISH_REVERSAL',
             'status': '🔴 BEARISH REVERSAL DETECTED',
             'price': round(c1, 2),
-            'action': 'Possible PE Buying Zone / Exit Long CE.',
+            'action': 'Scalping & Trading: PE Buying Zone / Exit Long CE.',
         }
   except Exception as e:
     print(f'Reversal Error: {e}')
@@ -492,13 +487,13 @@ def get_ai_trading_analysis(query):
   rev = check_reversal_pattern('^NSEI')
   rev_str = rev['status'] if rev else 'No immediate reversal.'
   return (
-      f'🤖 *AI TRADING ASSISTANT SUMMARY*\n\n'
+      f'🤖 *AI TRADING & SCALPING ASSISTANT*\n\n'
       f'• *Query:* _{query}_\n'
       f"• *Nifty Live:* `{tr['price']}` ({tr['change']}%)\n"
       f"• *Market Bias:* {tr['status']}\n"
       f'• *Reversal Alert:* {rev_str}\n'
       f"• *Smart Money:* {bm['action']}\n\n"
-      f"💡 *AI Recommendation:* {tr['action']}"
+      f"💡 *Recommendation:* {tr['action']}"
   )
 
 
@@ -528,7 +523,7 @@ def background_automation_scheduler():
             '🌅 *GOOD MORNING! MARKET BRIEFING*\n\n'
             f"• *Pre-Market Nifty Ref:* `{tr['price']}`\n"
             f"• *Initial Bias:* {tr['status']}\n"
-            '• *Action:* Prepare your setups for the opening bell!'
+            '• *Action:* Prepare your scalping & trading setups!'
         )
         for c_id in users:
           send_telegram_message(c_id, msg)
@@ -540,13 +535,13 @@ def background_automation_scheduler():
         if rev and rev.get('type') in ['BULLISH_REVERSAL', 'BEARISH_REVERSAL']:
           if users:
             msg = (
-                '🎯 *PERFECT 9:25 ENTRY SETUP FOUND!*\n\n'
+                '🎯 *PERFECT 9:25 TRADING SETUP FOUND!*\n\n'
                 f"• *Time:* {now.strftime('%H:%M:%S')}\n"
                 '• *Index:* Nifty 50\n'
                 f"• *Setup:* {rev.get('action')}\n"
                 f"• *Trigger Price:* `{rev.get('price')}`\n"
                 f"• *Status:* {rev.get('status')}\n\n"
-                '⚡ *Action:* Risk-reward calculate karke trade execute karein!'
+                '⚡ *Action:* Execute trade with strict Stop Loss!'
             )
             for c_id in users:
               send_telegram_message(c_id, msg)
@@ -570,16 +565,44 @@ def background_automation_scheduler():
 
 
 def real_time_entry_scanner():
-  global LAST_SIGNAL_STATE
+  global LAST_SIGNAL_STATE, LAST_NOTIFIED_PRICE
   while True:
     try:
+      tr = get_live_market_trend('^NSEI')
+      current_price = tr.get('price')
+
+      if isinstance(current_price, (int, float)):
+        if LAST_NOTIFIED_PRICE is None:
+          LAST_NOTIFIED_PRICE = current_price
+        else:
+          diff = current_price - LAST_NOTIFIED_PRICE
+          if abs(diff) >= 20:  # 20 se 50 points ka sharp move detection for scalping
+            move_type = (
+                '🚀 *SCALPING ALERT: UPWARD MOVE (+20 to 50 Pts)*'
+                if diff > 0
+                else '🔻 *SCALPING ALERT: DOWNWARD MOVE (-20 to 50 Pts)*'
+            )
+            users = get_all_users()
+            if users:
+              msg = (
+                  f'{move_type}\n\n'
+                  f'• *Previous Ref:* `{LAST_NOTIFIED_PRICE}`\n'
+                  f'• *Current Price:* `{current_price}`\n'
+                  f'• *Difference:* `{round(diff, 2)} Points`\n'
+                  f"• *Market Bias:* {tr['status']}\n\n"
+                  f"💡 *Trading Action:* {tr['action']}"
+              )
+              for c_id in users:
+                send_telegram_message(c_id, msg)
+            LAST_NOTIFIED_PRICE = current_price
+
       rev = check_reversal_pattern('^NSEI')
       if rev and rev['type'] != LAST_SIGNAL_STATE:
         LAST_SIGNAL_STATE = rev['type']
         users = get_all_users()
         if users:
           msg = (
-              '🔄 *REAL-TIME REVERSAL ALERT*\n\n'
+              '🔄 *INTRADAY TREND REVERSAL ALERT*\n\n'
               f"• *Status:* {rev['status']}\n"
               f"• *Trigger Price:* `{rev['price']}`\n"
               f"💡 *Setup:* {rev['action']}"
@@ -588,5 +611,4 @@ def real_time_entry_scanner():
             send_telegram_message(c_id, msg)
     except Exception as e:
       print(f'Scanner error: {e}')
-    time.sleep(30)
-    
+    time.sleep(15)  # Fast real-time check every 15 seconds
