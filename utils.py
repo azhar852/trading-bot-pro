@@ -16,7 +16,7 @@ RENDER_URL = 'https://trading-bot-pro-2bjl.onrender.com'
 
 LAST_SIGNAL_STATE = None
 LAST_NOTIFIED_PRICE = None
-LAST_ALERT_TIME = 0  # स्पैम रोकने के लिए Cooldown timer
+LAST_ALERT_TIME = 0
 PROCESSED_UPDATE_IDS = set()
 
 
@@ -78,7 +78,7 @@ def get_main_keyboard():
       'inline_keyboard': [
           [
               {'text': '📰 News', 'callback_data': 'news'},
-              {'text': '⚡ VWAP & RSI Setup', 'callback_data': 'scalping_alert'},
+              {'text': '⚡ Real-Time Scalp', 'callback_data': 'scalping_alert'},
           ],
           [
               {'text': '🎯 Trend Setup', 'callback_data': 'trend'},
@@ -149,7 +149,7 @@ def process_action(chat_id, data_action):
   elif data_action == 'scalping_alert':
     tr = get_live_market_trend('^NSEI')
     msg_sc = (
-        '⚡ *VWAP, RSI & MAs DESK*\n\n'
+        '⚡ *REAL-TIME SCALP DESK*\n\n'
         f"• Current Price: `{tr['price']}`\n"
         f"• VWAP: `{tr['vwap']}`\n"
         f"• RSI (14): `{tr['rsi']}`\n"
@@ -160,7 +160,7 @@ def process_action(chat_id, data_action):
   elif data_action == 'trend':
     tr = get_live_market_trend('^NSEI')
     msg_trend = (
-        '🎯 *INTRADAY TREND & VWAP SETUP*\n\n'
+        '🎯 *LIVE TREND SETUP*\n\n'
         f"• *Price:* `{tr['price']}` ({tr['change']}%)\n"
         f"• *VWAP:* `{tr['vwap']}`\n"
         f"• *RSI (14):* `{tr['rsi']}`\n"
@@ -228,7 +228,7 @@ def process_action(chat_id, data_action):
   elif data_action == 'signal':
     tr = get_live_market_trend('^NSEI')
     msg_sig = (
-        '⚡ *VWAP SIGNAL DESK*\n'
+        '⚡ *REAL-TIME SIGNAL DESK*\n'
         f"• Index Price: `{tr['price']}`\n"
         f"• VWAP: `{tr['vwap']}` | RSI: `{tr['rsi']}`\n"
         f"• Mode: {tr['status']}\n"
@@ -327,25 +327,12 @@ def calculate_vwap(data):
 def get_live_market_trend(symbol='^NSEI'):
   try:
     ticker = yf.Ticker(symbol)
-    data_5m = ticker.history(period='2d', interval='5m')
-    data_15m = ticker.history(period='2d', interval='15m')
+    data_5m = ticker.history(period='1d', interval='5m')
 
-    if len(data_5m) >= 15:
+    if len(data_5m) >= 5:
       current_price = round(data_5m['Close'].iloc[-1], 2)
-      sma_20 = data_5m['Close'].tail(20).mean()
       rsi_val = calculate_rsi(data_5m)
       vwap_val = calculate_vwap(data_5m)
-
-      last_3_falling = (
-          data_5m['Close'].iloc[-1]
-          < data_5m['Close'].iloc[-2]
-          < data_5m['Close'].iloc[-3]
-      )
-      last_3_rising = (
-          data_5m['Close'].iloc[-1]
-          > data_5m['Close'].iloc[-2]
-          > data_5m['Close'].iloc[-3]
-      )
 
       change_pct = round(
           ((current_price - data_5m['Close'].iloc[0])
@@ -354,43 +341,22 @@ def get_live_market_trend(symbol='^NSEI'):
           2,
       )
 
-      if (
-          last_3_falling
-          and current_price < sma_20
-          and current_price < vwap_val
-          and rsi_val < 50
-      ):
-        status = '🔴 STRONGLY BEARISH (Sell on Rise)'
+      if current_price > vwap_val and rsi_val > 50:
+        status = '🟢 BULLISH (Upward Momentum)'
         action = (
-            'VWAP, RSI (<50) & MAs confirm downward trend. Look for Put (PE)'
-            ' setups.'
-        )
-        bias = 'BEARISH'
-      elif (
-          last_3_rising
-          and current_price > sma_20
-          and current_price > vwap_val
-          and rsi_val > 50
-      ):
-        status = '🟢 STRONGLY BULLISH (Buy on Dips)'
-        action = (
-            'VWAP, RSI (>50) & MAs confirm upward momentum. Look for Call (CE)'
-            ' setups.'
+            'Price is above VWAP with RSI > 50. Look for Call (CE) opportunities.'
         )
         bias = 'BULLISH'
-      else:
-        status = '⚖️ SIDEWAYS / CONSOLIDATION'
+      elif current_price < vwap_val and rsi_val < 50:
+        status = '🔴 BEARISH (Downward Momentum)'
         action = (
-            'Market is near VWAP or consolidating. Avoid random trades to'
-            ' prevent losses.'
+            'Price is below VWAP with RSI < 50. Look for Put (PE) opportunities.'
         )
+        bias = 'BEARISH'
+      else:
+        status = '⚖️ CONSOLIDATION / SIDEWAYS'
+        action = 'Market is hovering around VWAP. Wait for a clear breakout.'
         bias = 'SIDEWAYS'
-
-      tf_status = 'Neutral'
-      if len(data_15m) >= 2:
-        p_15m = data_15m['Close'].iloc[-1]
-        o_15m = data_15m['Open'].iloc[-1]
-        tf_status = 'BULLISH' if p_15m > o_15m else 'BEARISH'
 
       return {
           'price': current_price,
@@ -400,7 +366,6 @@ def get_live_market_trend(symbol='^NSEI'):
           'status': status,
           'action': action,
           'bias': bias,
-          'tf_15m': tf_status,
       }
   except Exception as e:
     print(f'Error fetching live trend: {e}')
@@ -413,7 +378,6 @@ def get_live_market_trend(symbol='^NSEI'):
       'status': '⚖️ MARKET CHECK IN PROGRESS',
       'action': 'Verify with chart indicators.',
       'bias': 'NEUTRAL',
-      'tf_15m': 'N/A',
   }
 
 
@@ -443,38 +407,6 @@ def get_pivot_levels(symbol='^NSEI'):
   except Exception as e:
     print(f'Pivot error: {e}')
   return '📐 *Pivot Levels calculation currently updating.*'
-
-
-def check_reversal_pattern(symbol='^NSEI'):
-  try:
-    ticker = yf.Ticker(symbol)
-    data = ticker.history(period='1d', interval='5m')
-    if len(data) >= 15:
-      c1 = data['Close'].iloc[-1]
-      c2 = data['Close'].iloc[-2]
-      c3 = data['Close'].iloc[-3]
-      c4 = data['Close'].iloc[-4]
-      rsi_val = calculate_rsi(data)
-      vwap_val = calculate_vwap(data)
-      sma_5 = data['Close'].tail(5).mean()
-
-      if c4 > c3 > c2 and c1 > vwap_val and rsi_val > 55:
-        return {
-            'type': 'BULLISH_REVERSAL',
-            'status': '🟢 BULLISH REVERSAL CONFIRMED (VWAP & RSI)',
-            'price': round(c1, 2),
-            'action': 'Valid Reversal: Price crossed above VWAP. Consider CE.',
-        }
-      elif c4 < c3 < c2 and c1 < vwap_val and rsi_val < 45:
-        return {
-            'type': 'BEARISH_REVERSAL',
-            'status': '🔴 BEARISH REVERSAL CONFIRMED (VWAP & RSI)',
-            'price': round(c1, 2),
-            'action': 'Valid Reversal: Price crossed below VWAP. Consider PE.',
-        }
-  except Exception as e:
-    print(f'Reversal Error: {e}')
-  return None
 
 
 def analyze_pcr_data():
@@ -525,7 +457,6 @@ def get_daily_summary():
       f"• *Nifty Price:* `{tr['price']}` ({tr['change']}%)\n"
       f"• *VWAP:* `{tr['vwap']}` | *RSI:* `{tr['rsi']}`\n"
       f"• *Overall Trend Bias:* {tr['status']}\n"
-      f"• *15-Min Trend Confirmation:* `{tr['tf_15m']}`\n"
       f"• *Derivatives Sentiment:* {pcr['sentiment']}\n"
       f"• *Institutional Flow:* {bm['action']}\n\n"
       f"💡 *Next Session Plan:* {tr['action']}"
@@ -536,15 +467,12 @@ def get_ai_trading_analysis(query):
   tr = get_live_market_trend('^NSEI')
   pcr = analyze_pcr_data()
   bm = get_big_money_alert()
-  rev = check_reversal_pattern('^NSEI')
-  rev_str = rev['status'] if rev else 'No immediate reversal.'
   return (
       f'🤖 *AI TECHNICAL ASSISTANT*\n\n'
       f'• *Query:* _{query}_\n'
       f"• *Nifty Live:* `{tr['price']}` ({tr['change']}%)\n"
       f"• *VWAP:* `{tr['vwap']}` | *RSI:* `{tr['rsi']}`\n"
       f"• *Market Bias:* {tr['status']}\n"
-      f'• *Reversal Alert:* {rev_str}\n'
       f"• *Smart Money:* {bm['action']}\n\n"
       f"💡 *Recommendation:* {tr['action']}"
   )
@@ -561,7 +489,6 @@ def keep_alive():
 
 def background_automation_scheduler():
   morning_sent = False
-  scanner_sent = False
   closing_sent = False
 
   while True:
@@ -576,31 +503,11 @@ def background_automation_scheduler():
             '🌅 *GOOD MORNING! TECHNICAL BRIEFING*\n\n'
             f"• *Pre-Market Nifty Ref:* `{tr['price']}`\n"
             f"• *Initial Bias:* {tr['status']}\n"
-            '• *Action:* Prepare your VWAP setups!'
+            '• *Action:* Prepare your live setups!'
         )
         for c_id in users:
           send_telegram_message(c_id, msg)
       morning_sent = True
-
-    elif current_time_str == '09:25' and not scanner_sent:
-      try:
-        rev = check_reversal_pattern('^NSEI')
-        if rev and rev.get('type') in ['BULLISH_REVERSAL', 'BEARISH_REVERSAL']:
-          if users:
-            msg = (
-                '🎯 *PERFECT 9:25 VWAP SETUP FOUND!*\n\n'
-                f"• *Time:* {now.strftime('%H:%M:%S')}\n"
-                '• *Index:* Nifty 50\n'
-                f"• *Setup:* {rev.get('action')}\n"
-                f"• *Trigger Price:* `{rev.get('price')}`\n"
-                f"• *Status:* {rev.get('status')}\n\n"
-                '⚡ *Action:* Execute trade with strict Stop Loss!'
-            )
-            for c_id in users:
-              send_telegram_message(c_id, msg)
-      except Exception as e:
-        print(f'Smart 9:25 scanner error: {e}')
-      scanner_sent = True
 
     elif current_time_str == '15:30' and not closing_sent:
       if users:
@@ -611,78 +518,59 @@ def background_automation_scheduler():
 
     if current_time_str == '00:00':
       morning_sent = False
-      scanner_sent = False
       closing_sent = False
 
     time.sleep(30)
 
 
 def real_time_entry_scanner():
-  global LAST_SIGNAL_STATE, LAST_NOTIFIED_PRICE, LAST_ALERT_TIME
+  global LAST_NOTIFIED_PRICE, LAST_ALERT_TIME
   while True:
     try:
       current_time = time.time()
-      COOLDOWN_PERIOD = 900  # 15 मिनट का सख्त कूलडाउन अंतराल
+      COOLDOWN_PERIOD = (
+          300  # 5 मिनट का छोटा कूलडाउन ताकि हर मुवमेंट पर सही समय पर अलर्ट मिले
+      )
 
       tr = get_live_market_trend('^NSEI')
       current_price = tr.get('price')
       rsi_val = tr.get('rsi', 50)
       vwap_val = tr.get('vwap', 0)
-      bias = tr.get('bias', 'NEUTRAL')
 
       if isinstance(current_price, (int, float)):
         if LAST_NOTIFIED_PRICE is None:
           LAST_NOTIFIED_PRICE = current_price
         else:
           diff = current_price - LAST_NOTIFIED_PRICE
-          # यहाँ पॉइंट के अंतर को 50 से 60 पॉइंट कर दिया गया है + VWAP और RSI कन्फर्मेशन अनिवार्य है
+          # जब भी 50 से 60 पॉइंट का मूव किसी भी समय (2 या 10 मिनट में) आए
           if (
-              abs(diff) >= 55
+              abs(diff) >= 50
               and (current_time - LAST_ALERT_TIME) > COOLDOWN_PERIOD
           ):
-            if (diff > 0 and bias == 'BULLISH' and current_price > vwap_val) or (
-                diff < 0 and bias == 'BEARISH' and current_price < vwap_val
+            if (diff > 0 and current_price > vwap_val and rsi_val > 50) or (
+                diff < 0 and current_price < vwap_val and rsi_val < 50
             ):
               move_type = (
-                  f'🚀 *MAJOR BREAKOUT (+55+ Pts | VWAP Confirmed)*'
+                  f'🚀 *FAST SCALPING ALERT: UPWARD MOVE (+50+ Pts)*'
                   if diff > 0
-                  else f'🔻 *MAJOR BREAKDOWN (-55+ Pts | VWAP Confirmed)*'
+                  else f'🔻 *FAST SCALPING ALERT: DOWNWARD MOVE (-50+ Pts)*'
               )
               users = get_all_users()
               if users:
                 msg = (
                     f'{move_type}\n\n'
-                    f'• *Reference Price:* `{LAST_NOTIFIED_PRICE}`\n'
+                    f'• *Previous Ref:* `{LAST_NOTIFIED_PRICE}`\n'
                     f'• *Current Price:* `{current_price}`\n'
                     f'• *Net Move:* `{round(diff, 2)} Points`\n'
                     f'• *VWAP:* `{vwap_val}` | *RSI:* `{rsi_val}`\n'
                     f"• *Market Bias:* {tr['status']}\n\n"
-                    f"💡 *Trading Action:* {tr['action']}"
+                    f"💡 *Action:* {tr['action']}"
                 )
                 for c_id in users:
                   send_telegram_message(c_id, msg)
               LAST_NOTIFIED_PRICE = current_price
               LAST_ALERT_TIME = current_time
 
-      rev = check_reversal_pattern('^NSEI')
-      if (
-          rev
-          and rev['type'] != LAST_SIGNAL_STATE
-          and (current_time - LAST_ALERT_TIME) > COOLDOWN_PERIOD
-      ):
-        LAST_SIGNAL_STATE = rev['type']
-        users = get_all_users()
-        if users:
-          msg = (
-              '🔄 *CONFIRMED VWAP & RSI REVERSAL*\n\n'
-              f"• *Status:* {rev['status']}\n"
-              f"• *Trigger Price:* `{rev['price']}`\n"
-              f"💡 *Setup:* {rev['action']}"
-          )
-          for c_id in users:
-            send_telegram_message(c_id, msg)
-        LAST_ALERT_TIME = current_time
-
     except Exception as e:
       print(f'Scanner error: {e}')
-    time.sleep(30)
+    time.sleep(15)
