@@ -8,7 +8,6 @@ from utils import (
     analyze_pcr_data,
     answer_callback_query,
     background_automation_scheduler,
-    check_reversal_pattern,
     get_ai_trading_analysis,
     get_big_money_alert,
     get_daily_summary,
@@ -130,23 +129,15 @@ def telegram_webhook():
       elif text_lower == '/news':
         send_telegram_message(chat_id, get_market_news())
       elif text_lower == '/reversal':
-        rev = check_reversal_pattern('^NSEI')
         tr = get_live_market_trend('^NSEI')
-        if rev:
-          msg_rev = (
-              '🔄 *LIVE REVERSAL*\n'
-              f"• {rev['status']}\n"
-              f"• Price: `{rev['price']}`\n"
-              f"💡 {rev['action']}"
-          )
-          send_telegram_message(chat_id, msg_rev)
-        else:
-          msg_norev = (
-              '🔄 *REVERSAL CHECK*\n'
-              f"• Trend: {tr['status']}\n"
-              '⚖️ No immediate reversal.'
-          )
-          send_telegram_message(chat_id, msg_norev)
+        msg_rev = (
+            '🔄 *MARKET TREND & REVERSAL STATUS*\n'
+            f"• Status: {tr['status']}\n"
+            f"• Price: `{tr['price']}`\n"
+            f"• VWAP: `{tr['vwap']}` | RSI: `{tr['rsi']}`\n"
+            f"💡 {tr['action']}"
+        )
+        send_telegram_message(chat_id, msg_rev)
       elif text_lower.startswith('/ai'):
         query = text[3:].strip() or 'Overall market condition'
         send_telegram_message(chat_id, get_ai_trading_analysis(query))
@@ -156,7 +147,7 @@ def telegram_webhook():
             '🎯 *LIVE TREND (NIFTY)*\n'
             f"• Price: `{tr['price']}` ({tr['change']}%)\n"
             f"• Status: {tr['status']}\n"
-            f"• 15-Min TF: `{tr['tf_15m']}`\n"
+            f"• VWAP: `{tr['vwap']}` | RSI: `{tr['rsi']}`\n"
             f"💡 {tr['action']}"
         )
         send_telegram_message(chat_id, msg_trend)
@@ -165,6 +156,7 @@ def telegram_webhook():
         msg_nifty = (
             '📊 *NIFTY 50*\n'
             f"• Price: `{tr['price']}` ({tr['change']}%)\n"
+            f"• VWAP: `{tr['vwap']}` | RSI: `{tr['rsi']}`\n"
             f"• Bias: {tr['status']}"
         )
         send_telegram_message(chat_id, msg_nifty)
@@ -223,6 +215,7 @@ def telegram_webhook():
         msg_sig = (
             '⚡ *SCALP SIGNAL*\n'
             f"• Price: `{tr['price']}`\n"
+            f"• VWAP: `{tr['vwap']}` | RSI: `{tr['rsi']}`\n"
             f"• Mode: {tr['status']}\n"
             f"💡 {tr['action']}"
         )
@@ -247,4 +240,3 @@ threading.Thread(target=real_time_entry_scanner, daemon=True).start()
 if __name__ == '__main__':
   port = int(os.environ.get('PORT', 10000))
   app.run(host='0.0.0.0', port=port)
- 
