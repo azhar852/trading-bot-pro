@@ -14,32 +14,40 @@ except ImportError:
 TELEGRAM_BOT_TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN')
 RENDER_URL = 'https://trading-bot-pro-2bjl.onrender.com'
 
-LAST_SIGNAL_STATE = None
 LAST_NOTIFIED_PRICE = None
 LAST_ALERT_TIME = 0
 PROCESSED_UPDATE_IDS = set()
 
 
+def get_db_connection():
+  # Thread locking aur timeout issues se bachne ke liye safe connection
+  conn = sqlite3.connect('bot_users.db', check_same_thread=False, timeout=10)
+  return conn
+
+
 def init_db():
-  conn = sqlite3.connect('bot_users.db')
-  cursor = conn.cursor()
-  cursor.execute(
-      '''CREATE TABLE IF NOT EXISTS users (chat_id INTEGER PRIMARY KEY)'''
-  )
-  cursor.execute('''
-        CREATE TABLE IF NOT EXISTS trades (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            chat_id INTEGER,
-            symbol TEXT,
-            entry_price REAL,
-            exit_price REAL,
-            qty INTEGER,
-            pnl REAL,
-            date TEXT
-        )
-    ''')
-  conn.commit()
-  conn.close()
+  try:
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        '''CREATE TABLE IF NOT EXISTS users (chat_id INTEGER PRIMARY KEY)'''
+    )
+    cursor.execute('''
+            CREATE TABLE IF NOT EXISTS trades (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                chat_id INTEGER,
+                symbol TEXT,
+                entry_price REAL,
+                exit_price REAL,
+                qty INTEGER,
+                pnl REAL,
+                date TEXT
+            )
+        ''')
+    conn.commit()
+    conn.close()
+  except Exception as e:
+    print(f'DB Init Error: {e}')
 
 
 init_db()
@@ -47,7 +55,7 @@ init_db()
 
 def add_user_to_db(chat_id):
   try:
-    conn = sqlite3.connect('bot_users.db')
+    conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute(
         'INSERT OR IGNORE INTO users (chat_id) VALUES (?)', (chat_id,)
@@ -61,7 +69,7 @@ def add_user_to_db(chat_id):
 def get_all_users():
   users = set()
   try:
-    conn = sqlite3.connect('bot_users.db')
+    conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute('SELECT chat_id FROM users')
     rows = cursor.fetchall()
@@ -198,7 +206,8 @@ def process_action(chat_id, data_action):
   elif data_action == 'pivots':
     send_telegram_message(chat_id, get_pivot_levels('^NSEI'))
   elif data_action == 'pcr':
-    p = analyze_pcr_data()
+    tr = get_live_market_trend('^NSEI')
+    p = analyze_pcr_data(tr)
     msg_pcr = (
         '📈 *PCR ANALYTICS*\n'
         f"• Ratio: `{p['pcr']}`\n"
@@ -206,7 +215,8 @@ def process_action(chat_id, data_action):
     )
     send_telegram_message(chat_id, msg_pcr)
   elif data_action == 'bigmoney':
-    bm = get_big_money_alert()
+    tr = get_live_market_trend('^NSEI')
+    bm = get_big_money_alert(tr)
     msg_bm = f"🐋 *SMART MONEY FLOW*\n• {bm['action']}\n• {bm['details']}"
     send_telegram_message(chat_id, msg_bm)
   elif data_action == 'crude_oil':
@@ -409,8 +419,9 @@ def get_pivot_levels(symbol='^NSEI'):
   return '📐 *Pivot Levels calculation currently updating.*'
 
 
-def analyze_pcr_data():
-  tr = get_live_market_trend('^NSEI')
+def analyze_pcr_data(tr=None):
+  if not tr:
+    tr = get_live_market_trend('^NSEI')
   if tr['bias'] == 'BEARISH':
     return {
         'pcr': 0.75,
@@ -430,8 +441,9 @@ def analyze_pcr_data():
   }
 
 
-def get_big_money_alert():
-  tr = get_live_market_trend('^NSEI')
+def get_big_money_alert(tr=None):
+  if not tr:
+    tr = get_live_market_trend('^NSEI')
   if tr['bias'] == 'BEARISH':
     return {
         'action': '🔴 HEAVY FII OUTFLOW (SELLING)',
@@ -450,8 +462,8 @@ def get_big_money_alert():
 
 def get_daily_summary():
   tr = get_live_market_trend('^NSEI')
-  pcr = analyze_pcr_data()
-  bm = get_big_money_alert()
+  pcr = analyze_pcr_data(tr)  # Duplicate call avoided
+  bm = get_big_money_alert(tr)  # Duplicate call avoided
   return (
       f'📊 *DAILY MARKET SUMMARY & TECHNICAL REPORT*\n\n'
       f"• *Nifty Price:* `{tr['price']}` ({tr['change']}%)\n"
@@ -465,8 +477,8 @@ def get_daily_summary():
 
 def get_ai_trading_analysis(query):
   tr = get_live_market_trend('^NSEI')
-  pcr = analyze_pcr_data()
-  bm = get_big_money_alert()
+  pcr = analyze_pcr_data(tr)  # Optimized
+  bm = get_big_money_alert(tr)  # Optimized
   return (
       f'🤖 *AI TECHNICAL ASSISTANT*\n\n'
       f'• *Query:* _{query}_\n'
@@ -507,6 +519,7 @@ def background_automation_scheduler():
         )
         for c_id in users:
           send_telegram_message(c_id, msg)
+          time.sleep(0.1)  # Safe delay to prevent Telegram block
       morning_sent = True
 
     elif current_time_str == '15:30' and not closing_sent:
@@ -514,6 +527,7 @@ def background_automation_scheduler():
         summary_msg = get_daily_summary()
         for c_id in users:
           send_telegram_message(c_id, summary_msg)
+          time.sleep(0.1)  # Safe delay
       closing_sent = True
 
     if current_time_str == '00:00':
@@ -529,7 +543,7 @@ def real_time_entry_scanner():
     try:
       current_time = time.time()
       COOLDOWN_PERIOD = (
-          300  # 5 मिनट का छोटा कूलडाउन ताकि हर मुवमेंट पर सही समय पर अलर्ट मिले
+          300  # 5 minute ka cooldown taaki spam aur fake alerts na aayein
       )
 
       tr = get_live_market_trend('^NSEI')
@@ -542,7 +556,7 @@ def real_time_entry_scanner():
           LAST_NOTIFIED_PRICE = current_price
         else:
           diff = current_price - LAST_NOTIFIED_PRICE
-          # जब भी 50 से 60 पॉइंट का मूव किसी भी समय (2 या 10 मिनट में) आए
+          # 50+ points ka real-time breakout/breakdown scanner
           if (
               abs(diff) >= 50
               and (current_time - LAST_ALERT_TIME) > COOLDOWN_PERIOD
@@ -568,9 +582,12 @@ def real_time_entry_scanner():
                 )
                 for c_id in users:
                   send_telegram_message(c_id, msg)
+                  time.sleep(0.1)  # Telegram broadcast safety
               LAST_NOTIFIED_PRICE = current_price
               LAST_ALERT_TIME = current_time
 
     except Exception as e:
       print(f'Scanner error: {e}')
-    time.sleep(15)
+    time.sleep(
+        30
+    )  # Safe interval to protect yfinance limits while keeping real-time tracking
