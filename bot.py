@@ -1,5 +1,5 @@
+import logging
 import os
-import sqlite3
 import threading
 from flask import Flask, request
 from utils import (
@@ -11,10 +11,17 @@ from utils import (
     get_ai_trading_analysis,
     get_big_money_alert,
     get_daily_summary,
+    get_db_connection,
+    get_global_markets,
+    get_gold_silver,
     get_live_market_trend,
     get_main_keyboard,
     get_market_news,
+    get_next_expiry,
     get_pivot_levels,
+    get_real_vix,
+    get_sector_performance,
+    get_usd_inr,
     keep_alive,
     process_action,
     real_time_entry_scanner,
@@ -22,6 +29,13 @@ from utils import (
 )
 
 app = Flask(__name__)
+
+# Logging setup for app.py
+logging.basicConfig(
+    filename='bot.log',
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+)
 
 
 @app.route('/')
@@ -36,7 +50,7 @@ def telegram_webhook():
     if not update:
       return 'OK', 200
 
-    print(f'📥 Received Update: {update}')
+    logging.info(f'📥 Received Update ID: {update.get("update_id")}')
 
     update_id = update.get('update_id')
     if update_id:
@@ -77,9 +91,12 @@ def telegram_webhook():
             ' below:',
             reply_markup=get_main_keyboard(),
         )
+
       elif text_lower.startswith('/calc'):
         try:
           parts = text.split()
+          if len(parts) < 2:
+            raise IndexError
           entry = float(parts[1])
           sl = entry * 0.99
           target1 = entry + (entry - sl) * 2
@@ -92,20 +109,32 @@ def telegram_webhook():
               f'• 🟢 Target 2 (1:3): `{target2:.2f}`'
           )
           send_telegram_message(chat_id, calc_msg)
-        except Exception:
+        except IndexError:
           send_telegram_message(
               chat_id, '⚠️ Sahi format use karein: `/calc 22600`'
           )
+        except ValueError:
+          send_telegram_message(
+              chat_id,
+              '⚠️ Kripya sirf numbers ka upyog karein (e.g., `/calc 22600`)',
+          )
+        except Exception:
+          send_telegram_message(
+              chat_id, '⚠️ Kuchh galat ho gaya. Dobara try karein.'
+          )
+
       elif text_lower.startswith('/trade'):
         try:
           parts = text.split()
+          if len(parts) < 5:
+            raise IndexError
           symbol = parts[1]
           entry = float(parts[2])
           exit_p = float(parts[3])
           qty = int(parts[4])
           pnl = (exit_p - entry) * qty
 
-          conn = sqlite3.connect('bot_users.db')
+          conn = get_db_connection()
           cursor = conn.cursor()
           cursor.execute(
               'INSERT INTO trades (chat_id, symbol, entry_price, exit_price,'
@@ -121,24 +150,36 @@ def telegram_webhook():
               f'• P&L: `₹{pnl:.2f}`'
           )
           send_telegram_message(chat_id, trade_msg)
-        except Exception:
+        except IndexError:
+          send_telegram_message(
+              chat_id, '⚠️ Format: `/trade Nifty 22600 22750 50`'
+          )
+        except ValueError:
           send_telegram_message(
               chat_id,
-              '⚠️ Sahi format use karein: `/trade Nifty 22600 22750 50`',
+              '⚠️ Entry, Exit aur Qty mein sirf numbers hone chahiye.',
           )
-      elif text_lower == '/news':
-        send_telegram_message(chat_id, get_market_news())
-      elif text_lower == '/reversal':
-        tr = get_live_market_trend('^NSEI')
-        msg_rev = (
-            '🔄 *MARKET TREND & REVERSAL STATUS*\n'
-            f"• Status: {tr['status']}\n"
-            f"• Price: `{tr['price']}`\n"
-            f"• VWAP: `{tr['vwap']}` | RSI: `{tr['rsi']}`\n"
-            f"💡 {tr['action']}"
+        except Exception:
+          send_telegram_message(chat_id, '⚠️ Trade save karne mein error aaya.')
+
+      elif text_lower in ['/vix', '/india_vix']:
+        send_telegram_message(chat_id, get_real_vix())
+      elif text_lower in ['/global', '/world']:
+        send_telegram_message(chat_id, get_global_markets())
+      elif text_lower in ['/usdinr', '/dollar']:
+        send_telegram_message(chat_id, get_usd_inr())
+      elif text_lower in ['/metals', '/gold']:
+        send_telegram_message(chat_id, get_gold_silver())
+      elif text_lower in ['/sectors', '/sector']:
+        send_telegram_message(chat_id, get_sector_performance())
+      elif text_lower in ['/expiry', '/expiration']:
+        send_telegram_message(chat_id, get_next_expiry())
+
+      elif text_lower == '/ai_analysis':
+        send_telegram_message(
+            chat_id, get_ai_trading_analysis('General Market Overview')
         )
-        send_telegram_message(chat_id, msg_rev)
-      elif text_lower.startswith('/ai'):
+      elif text_lower == '/ai' or text_lower.startswith('/ai '):
         query = text[3:].strip() or 'Overall market condition'
         send_telegram_message(chat_id, get_ai_trading_analysis(query))
       elif text_lower in ['/trend', '/market']:
@@ -165,6 +206,7 @@ def telegram_webhook():
         msg_bn = (
             '🏦 *BANK NIFTY*\n'
             f"• Price: `{tr['price']}` ({tr['change']}%)\n"
+            f"• VWAP: `{tr['vwap']}` | RSI: `{tr['rsi']}`\n"
             f"• Bias: {tr['status']}"
         )
         send_telegram_message(chat_id, msg_bn)
@@ -173,6 +215,7 @@ def telegram_webhook():
         msg_sx = (
             '📈 *SENSEX*\n'
             f"• Price: `{tr['price']}` ({tr['change']}%)\n"
+            f"• VWAP: `{tr['vwap']}` | RSI: `{tr['rsi']}`\n"
             f"• Bias: {tr['status']}"
         )
         send_telegram_message(chat_id, msg_sx)
@@ -204,10 +247,6 @@ def telegram_webhook():
             ' assistance in Bhopal, contact the administrator directly through'
             ' registered channels.\n\n_Status: Verified & Active_ ✅',
         )
-      elif text_lower == '/ai_analysis':
-        send_telegram_message(
-            chat_id, get_ai_trading_analysis('General Market Overview')
-        )
       elif text_lower == '/summary':
         send_telegram_message(chat_id, get_daily_summary())
       elif text_lower == '/signal':
@@ -220,6 +259,18 @@ def telegram_webhook():
             f"💡 {tr['action']}"
         )
         send_telegram_message(chat_id, msg_sig)
+      elif text_lower == '/news':
+        send_telegram_message(chat_id, get_market_news())
+      elif text_lower == '/reversal':
+        tr = get_live_market_trend('^NSEI')
+        msg_rev = (
+            '🔄 *MARKET TREND & REVERSAL STATUS*\n'
+            f"• Status: {tr['status']}\n"
+            f"• Price: `{tr['price']}`\n"
+            f"• VWAP: `{tr['vwap']}` | RSI: `{tr['rsi']}`\n"
+            f"💡 {tr['action']}"
+        )
+        send_telegram_message(chat_id, msg_rev)
       else:
         send_telegram_message(
             chat_id,
@@ -228,7 +279,7 @@ def telegram_webhook():
         )
 
   except Exception as e:
-    print(f'❌ Webhook error: {e}')
+    logging.error(f'❌ Webhook error: {e}')
   return 'OK', 200
 
 
@@ -240,3 +291,4 @@ threading.Thread(target=real_time_entry_scanner, daemon=True).start()
 if __name__ == '__main__':
   port = int(os.environ.get('PORT', 10000))
   app.run(host='0.0.0.0', port=port)
+    
